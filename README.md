@@ -1,6 +1,6 @@
 # Monkey Island SVGA
 
-`Monkey Island SVGA` es un fork especializado de ScummVM pensado para disfrutar de **The Secret of Monkey Island VGA para PC** con un tratamiento gráfico en alta definición.
+`Monkey Island SVGA` es un fork especializado de ScummVM pensado para disfrutar de **The Secret of Monkey Island VGA CD para PC** con un tratamiento gráfico en alta definición.
 
 La idea es simple: mantener intacto el juego que conocemos y queremos, pero darle una presentación visual mucho más rica gracias a fondos, objetos y mejoras de render específicas para esta edición.
 
@@ -19,7 +19,7 @@ La idea no es “estirar” Monkey Island, sino reconstruir su presentación vis
 
 ## Qué es este proyecto
 
-Este fork añade una ruta de render propia para Monkey Island 1 VGA en PC, con soporte para:
+Este fork añade una ruta de render propia para Monkey Island 1 VGA CD en PC, con soporte para:
 
 - fondos HD a `4x`
 - objetos HD a `4x`
@@ -28,18 +28,19 @@ Este fork añade una ruta de render propia para Monkey Island 1 VGA en PC, con s
 - inventario con PNGs HD
 - shaders CRT ajustados para esta variante
 
-No pretende ser una distribución genérica de ScummVM. Está enfocado en un único objetivo: **Monkey Island 1 VGA para PC en versión SVGA/HD**.
+No pretende ser una distribución genérica de ScummVM. Está enfocado en un único objetivo: **Monkey Island 1 VGA CD para PC en versión SVGA/HD**.
 
 ## Qué versiones cubre
 
 Este fork está orientado a:
 
-- **The Secret of Monkey Island VGA para PC**
-- variantes originales para PC que sigan esa misma base SCUMM/VGA
-- versiones talkie compatibles con esa misma ruta técnica
+- **The Secret of Monkey Island CD para DOS/PC**
+- la edición VGA basada en SCUMM v5 con variante detectada como `CD`
+- copias compatibles con esa misma ROM base
 
 Quedan fuera del objetivo del proyecto:
 
+- otras ediciones VGA de PC que no compartan la variante `CD`
 - Monkey Island 2
 - versiones EGA
 - variantes de otras plataformas como FM-Towns, Amiga, Mac o Sega CD
@@ -58,7 +59,7 @@ En pocas palabras:
 
 Este proyecto **no distribuye el juego original**.
 
-Necesitas tu propia copia legal de **The Secret of Monkey Island VGA para PC**.
+Necesitas tu propia copia legal de **The Secret of Monkey Island CD para PC**.
 
 Lo que sí forma parte de este proyecto es:
 
@@ -76,6 +77,8 @@ Lo que sí forma parte de este proyecto es:
 - render específico `MonkeyHdRenderer`
 - mejora runtime de sprites clásicos con `xBRZ`
 - conjunto de shaders reducido a los presets CRT realmente soportados por este fork
+- arranque directo de Monkey Island sin pasar por el launcher
+- validación estricta de la ROM: sólo acepta la edición `CD/DOS`
 
 ## Compilación
 
@@ -94,6 +97,16 @@ Si existe el script auxiliar, hace exactamente eso:
 
 La intención es que cualquiera pueda compilar este fork en su sistema, siempre que ScummVM sea compilable en esa plataforma y existan las dependencias habituales.
 
+## Arranque
+
+El ejecutable está pensado para comportarse como una app dedicada a este juego:
+
+- si se lanza sin argumentos, intenta arrancar directamente `The Secret of Monkey Island (CD/DOS)` desde el directorio donde está el binario
+- si encuentra una ROM distinta, o no encuentra la ROM correcta, aborta con error
+- el shader por defecto en ese arranque directo es `CRT Interlaced Halation Extreme`
+
+En otras palabras: no hay que elegir juego en el launcher. Si la carpeta contiene la ROM correcta y `Monkey_4X`, arranca.
+
 ## Estructura esperada
 
 El ejecutable debe convivir con los datos del juego y con los assets HD.
@@ -104,8 +117,8 @@ Ejemplo típico:
 Monkey/
   scummvm
   scummvm-local.ini
-  monkey.000
-  monkey.001
+  MONKEY.000
+  MONKEY.001
   monkey.sog
   Monkey_4X/
     backgrounds/
@@ -119,6 +132,7 @@ Notas:
 - `Monkey_4X/backgrounds` puede usar `.png`, `.jpg` o `.jpeg`
 - `Monkey_4X/objects` usa `.png`
 - `Monkey_extracted` puede existir como material de trabajo para generar assets, pero ya no es una dependencia de runtime
+- los ficheros mínimos de la ROM base son `MONKEY.000` y `MONKEY.001`
 - el juego original no se incluye
 - los assets HD sí forman parte del proyecto
 

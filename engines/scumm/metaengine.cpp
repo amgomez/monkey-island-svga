@@ -50,6 +50,20 @@
 
 namespace Scumm {
 
+static bool isSupportedMonkeyIslandSvgacd(const DetectorResult &res) {
+	return res.game.id == GID_MONKEY &&
+		res.game.version == 5 &&
+		res.game.heversion == 0 &&
+		res.game.platform == Common::kPlatformDOS &&
+		res.game.variant &&
+		strcmp(res.game.variant, "CD") == 0;
+}
+
+static Common::Error unsupportedMonkeyIslandSvgaGameError() {
+	return Common::Error(Common::kUnsupportedGameidError,
+		"Monkey Island SVGA only supports The Secret of Monkey Island VGA CD for PC. Put the original CD-ROM files (MONKEY.000 and MONKEY.001) in this directory.");
+}
+
 Common::Path ScummEngine::generateFilename(const int room) const {
 	const int diskNumber = (room > 0) ? _res->_types[rtRoom][room]._roomno : 0;
 	Common::String result;
@@ -269,6 +283,9 @@ Common::Error ScummMetaEngine::createInstance(OSystem *syst, Engine **engine,
 	assert(engine);
 	const char *gameid = ConfMan.get("gameid").c_str();
 
+	if (strcmp(gameid, "monkey") != 0)
+		return unsupportedMonkeyIslandSvgaGameError();
+
 	// We start by checking whether the specified game ID is obsolete.
 	// If that is the case, we automatically upgrade the target to use
 	// the correct new game ID (and platform, if specified).
@@ -286,9 +303,16 @@ Common::Error ScummMetaEngine::createInstance(OSystem *syst, Engine **engine,
 	Common::List<DetectorResult> results;
 	::detectGames(fslist, results, gameid);
 
-	// Unable to locate game data.
+	Common::List<DetectorResult> supportedResults;
+	for (Common::List<DetectorResult>::const_iterator x = results.begin(); x != results.end(); ++x) {
+		if (isSupportedMonkeyIslandSvgacd(*x))
+			supportedResults.push_back(*x);
+	}
+	results = supportedResults;
+
+	// Unable to locate supported game data.
 	if (results.empty())
-		return Common::kNoGameDataFoundError;
+		return unsupportedMonkeyIslandSvgaGameError();
 
 	// No unique match found. If a platform override is present, try to
 	// narrow down the list a bit more.

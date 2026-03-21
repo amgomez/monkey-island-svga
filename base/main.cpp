@@ -118,6 +118,48 @@ static bool launcherDialog() {
 	return status;
 }
 
+static Common::Path resolveMonkeySvgabasePath(const char *argv0) {
+	if (argv0 && (*argv0 == '/' || *argv0 == '.' || strchr(argv0, '\\'))) {
+		Common::FSNode execNode(Common::Path(argv0, Common::Path::kNativeSeparator));
+		Common::FSNode parent = execNode.getParent();
+		if (parent.exists() && parent.isDirectory())
+			return parent.getPath();
+	}
+
+	return Common::Path(".", Common::Path::kNativeSeparator);
+}
+
+static Common::Path defaultMonkeySvgashaderPath(const Common::Path &basePath) {
+	return Common::FSNode(basePath).getChild("gui").getChild("themes").getChild("crt").getChild("crt-interlaced-halation-extreme-monkeyhd.glslp").getPath();
+}
+
+static void activateDefaultMonkeySvgatarget(const Common::Path &basePath) {
+	Common::String target = "monkey";
+
+	if (!ConfMan.hasGameDomain(target)) {
+		target = EngineMan.generateUniqueDomain("monkey");
+		ConfMan.addGameDomain(target);
+		ConfMan.set("engineid", "scumm", target);
+		ConfMan.set("gameid", "monkey", target);
+		ConfMan.set("extra", "CD", target);
+		ConfMan.set("id_came_from_command_line", "1", target);
+	}
+
+	ConfMan.setActiveDomain(target);
+	ConfMan.setPath("path", basePath, Common::ConfigManager::kTransientDomain);
+
+	if (!ConfMan.isKeyTemporary("themepath")) {
+		Common::FSNode themesDir = Common::FSNode(basePath).getChild("gui").getChild("themes");
+		ConfMan.setPath("themepath", themesDir.getPath(), Common::ConfigManager::kTransientDomain);
+	}
+
+	if (!ConfMan.isKeyTemporary("shader")) {
+		ConfMan.set("shader", defaultMonkeySvgashaderPath(basePath).toString(Common::Path::kNativeSeparator), Common::ConfigManager::kTransientDomain);
+	}
+
+	ConfMan.setBool("gui_return_to_launcher_at_exit", false, Common::ConfigManager::kTransientDomain);
+}
+
 static Common::Error identifyGame(const Common::String &debugLevels, const Plugin **detectionPlugin, DetectedGame &game, const void **descriptor) {
 	assert(detectionPlugin);
 
@@ -406,6 +448,7 @@ static void setupKeymapper(OSystem &system) {
 extern "C" int scummvm_main(int argc, const char * const argv[]) {
 	Common::String specialDebug;
 	Common::String command;
+	const Common::Path monkeySvgabasePath = resolveMonkeySvgabasePath((argc && argv) ? argv[0] : nullptr);
 
 	// Verify that the backend has been initialized (i.e. g_system has been set).
 	assert(g_system);
@@ -454,6 +497,11 @@ extern "C" int scummvm_main(int argc, const char * const argv[]) {
 			if (!settings.contains(additionalSetting._key))
 				settings[additionalSetting._key] = additionalSetting._value;
 		}
+	}
+
+	const bool autoLaunchMonkeySvga = command.empty();
+	if (autoLaunchMonkeySvga && !settings.contains("shader")) {
+		settings["shader"] = defaultMonkeySvgashaderPath(monkeySvgabasePath).toString(Common::Path::kNativeSeparator);
 	}
 
 	// Load the config file (possibly overridden via command line):
@@ -740,9 +788,13 @@ extern "C" int scummvm_main(int argc, const char * const argv[]) {
 			extensionSupportString[neonSupport].c_str());
 	}
 
-	// Unless a game was specified, show the launcher dialog
-	if (nullptr == ConfMan.getActiveDomain() && !ConfMan.hasKey("dump_all_dialogs"))
+	const bool shouldAutoLaunchMonkeySvga = (autoLaunchMonkeySvga && nullptr == ConfMan.getActiveDomain() && !ConfMan.hasKey("dump_all_dialogs"));
+
+	if (shouldAutoLaunchMonkeySvga) {
+		activateDefaultMonkeySvgatarget(monkeySvgabasePath);
+	} else if (nullptr == ConfMan.getActiveDomain() && !ConfMan.hasKey("dump_all_dialogs")) {
 		launcherDialog();
+	}
 
 	// FIXME: We're now looping the launcher. This, of course, doesn't
 	// work as well as it should. In theory everything should be destroyed
@@ -892,6 +944,8 @@ extern "C" int scummvm_main(int argc, const char * const argv[]) {
 		// reset the graphics to default
 		setupGraphics(system);
 		if (nullptr == ConfMan.getActiveDomain()) {
+			if (shouldAutoLaunchMonkeySvga)
+				break;
 			launcherDialog();
 		}
 	}

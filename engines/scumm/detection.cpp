@@ -222,6 +222,15 @@ static Common::String generatePreferredTarget(const DetectorResult &x) {
 	return res;
 }
 
+static bool isSupportedMonkeyIslandSvgacd(const DetectorResult &res) {
+	return res.game.id == GID_MONKEY &&
+		res.game.version == 5 &&
+		res.game.heversion == 0 &&
+		res.game.platform == Common::kPlatformDOS &&
+		res.game.variant &&
+		strcmp(res.game.variant, "CD") == 0;
+}
+
 DetectedGames ScummMetaEngineDetection::detectGames(const Common::FSList &fslist, uint32 /*skipADFlags*/, bool /*skipIncomplete*/) {
 	DetectedGames detectedGames;
 	Common::List<DetectorResult> results;
@@ -229,6 +238,9 @@ DetectedGames ScummMetaEngineDetection::detectGames(const Common::FSList &fslist
 
 	for (Common::List<DetectorResult>::iterator
 	          x = results.begin(); x != results.end(); ++x) {
+		if (!isSupportedMonkeyIslandSvgacd(*x))
+			continue;
+
 		const PlainGameDescriptor *g = findPlainGameDescriptor(x->game.gameid, gameDescriptions);
 		assert(g);
 
