@@ -236,6 +236,7 @@ static const MD5Table md5table[] = {
 	{ "41958e24d03181ff9a381a66d048a581", "ft", "", "", -1, Common::PT_BRA, Common::kPlatformUnknown },
 	{ "425205754fa749f4f0b0dd9d09fa45fd", "football", "", "Demo", -1, Common::EN_ANY, Common::kPlatformUnknown },
 	{ "4252854e7d052cb488b520ba89c3eb6d", "monkey", "SE Talkie", "Unofficial SE Talkie v1.01", 9135, Common::DE_DEU, Common::kPlatformDOS },
+	{ "4306dc3e68c73ce8650f479dde3bc5e0", "monkey", "CD", "CD", 8955, Common::UNK_LANG, Common::kPlatformDOS },
 	{ "430bc518017b6fac046f58bab6baad5d", "monkey2", "FM-TOWNS", "", 11135, Common::JA_JPN, Common::kPlatformFMTowns },
 	{ "43950303291675b305178f37a56d72ec", "soccer", "", "Steam", -1, Common::EN_ANY, Common::kPlatformWindows },
 	{ "439a7f4adf510489981ac52308e7d7a2", "maniac", "C64", "", 1188, Common::DE_DEU, Common::kPlatformC64 },

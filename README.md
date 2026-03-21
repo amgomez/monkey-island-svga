@@ -1,80 +1,152 @@
-# [ScummVM README](https://www.scummvm.org/) · [![CI](https://github.com/scummvm/scummvm/actions/workflows/ci.yml/badge.svg)](https://github.com/scummvm/scummvm/actions/workflows/ci.yml) [![Translation status](https://translations.scummvm.org/widgets/scummvm/-/scummvm/svg-badge.svg)](https://translations.scummvm.org/engage/scummvm/?utm_source=widget) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md#pull-requests) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/e06e5b18f8464fef859b5a7f78d10357)](https://www.codacy.com/gh/scummvm/scummvm/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=scummvm/scummvm&amp;utm_campaign=Badge_Grade)
+# Monkey Island SVGA
 
-## About ScummVM
+`Monkey Island SVGA` es un fork especializado de ScummVM pensado para disfrutar de **The Secret of Monkey Island VGA para PC** con un tratamiento gráfico en alta definición.
 
-ScummVM allows you to play classic graphic point-and-click adventure games, text adventure games, and RPGs, as long as you already have the game data files. ScummVM replaces the executable files shipped with the games, which means you can now play your favorite games on all your favorite devices.
+La idea es simple: mantener intacto el juego que conocemos y queremos, pero darle una presentación visual mucho más rica gracias a fondos, objetos y mejoras de render específicas para esta edición.
 
-So how did ScummVM get its name? Many of the famous LucasArts adventure games, such as Maniac Mansion and the Monkey Island series, were created using a utility called SCUMM (Script Creation Utility for Maniac Mansion). The ‘VM’ in ScummVM stands for Virtual Machine.
+## Comparativa visual
 
-While ScummVM was originally designed to run LucasArts’ SCUMM games, over time support has been added for many other games: see the full list [on our wiki](https://wiki.scummvm.org/index.php?title=Category:Supported_Games). Noteworthy titles include Broken Sword, Myst and Blade Runner, although there are countless other hidden gems to explore.
+Así se ve el salto entre una imagen original ampliada por interpolación y su equivalente HD dentro de este proyecto:
 
-For more information, compatibility lists, details on donating, the
-latest release, progress reports and more, please visit the ScummVM [home
-page](https://www.scummvm.org/).
+| Baja resolución interpolada | Versión HD |
+| --- | --- |
+| ![Casa de la Gobernadora interpolada](docs/images/0023_cu-gov-interpolada.jpg) | ![Casa de la Gobernadora HD](docs/images/0023_cu-gov-hd.jpg) |
+| ![Mirador interpolado](docs/images/0038_lookout-interpolada.jpg) | ![Mirador HD](docs/images/0038_lookout-hd.jpg) |
+| ![Acantilado del infierno interpolado](docs/images/0070_hellcliff-interpolada.jpg) | ![Acantilado del infierno HD](docs/images/0070_hellcliff-hd.jpg) |
+| ![Mêlée interpolada](docs/images/0085_melee-interpolada.jpg) | ![Mêlée HD](docs/images/0085_melee-hd.jpg) |
 
-## Quickstart
+La idea no es “estirar” Monkey Island, sino reconstruir su presentación visual con assets preparados específicamente para esta edición.
 
-For the impatient among you, here is how to get ScummVM running in five simple steps.
+## Qué es este proyecto
 
-1. Download ScummVM from [our website](https://www.scummvm.org/downloads/) and install it.
+Este fork añade una ruta de render propia para Monkey Island 1 VGA en PC, con soporte para:
 
-2. Create a directory on your hard drive and copy the game datafiles from the original media to this directory. Repeat this for every game you want to play.
+- fondos HD a `4x`
+- objetos HD a `4x`
+- composición final en `RGBA`
+- mejora en tiempo real de sprites dinámicos mediante `xBRZ`
+- inventario con PNGs HD
+- shaders CRT ajustados para esta variante
 
-3. Start ScummVM, choose 'Add game', select the directory containing the game datafiles (do not try to select the datafiles themselves!) and press Choose.
+No pretende ser una distribución genérica de ScummVM. Está enfocado en un único objetivo: **Monkey Island 1 VGA para PC en versión SVGA/HD**.
 
-4. The Game Options dialog opens to allow configuration of various settings for the game. These can be reconfigured at any time, but for now everything should be OK at the default settings.
+## Qué versiones cubre
 
-5. Select the game you want to play in the list, and press Start. To play a game next time, skip to step 5, unless you want to add more games.
+Este fork está orientado a:
 
->
-> Hint:
->
-> To add multiple games in one go, press and hold the shift key, then click 'Add game' -- the label will change to 'Mass Add' and if you press it, you are again asked to select a directory, only this time ScummVM will search through all subdirectories for supported games.
+- **The Secret of Monkey Island VGA para PC**
+- variantes originales para PC que sigan esa misma base SCUMM/VGA
+- versiones talkie compatibles con esa misma ruta técnica
 
+Quedan fuera del objetivo del proyecto:
 
+- Monkey Island 2
+- versiones EGA
+- variantes de otras plataformas como FM-Towns, Amiga, Mac o Sega CD
 
-## Reporting a bug
+## Base del proyecto
 
-To report a bug, go to the ScummVM [Issue Tracker](https://bugs.scummvm.org/) and log in with your GitHub account.
+Este proyecto está **basado en ScummVM**.
 
-Please make sure the bug is reproducible, and still occurs in the latest git/[Daily build](https://buildbot.scummvm.org/#/dailybuilds) version. Also check the [compatibility list](https://www.scummvm.org/compatibility/) for that game, to ensure the issue is not already known. Please do not report bugs for games that are not listed as completable on the [Supported Games](https://wiki.scummvm.org/index.php?title=Category:Supported_Games) wiki page, or on the compatibility list. We already know those games have bugs!
+ScummVM sigue siendo el motor base, la referencia técnica principal y el proyecto upstream al que se debe este trabajo. Este fork simplemente adapta y especializa ScummVM para ejecutar Monkey Island 1 VGA con assets HD y un pipeline gráfico propio.
 
-Please include the following information in the bug report:
+En pocas palabras:
 
-- ScummVM version (test the latest git/[Daily build](https://buildbot.scummvm.org/#/dailybuilds))
-- Bug details, including instructions for how to reproduce the bug. If possible, include log files, screenshots, and any other relevant information.
-- Game language
-- Game version (for example, talkie or floppy)
-- Platform and Compiler (for example, Win32, Linux or FreeBSD)
-- An attached saved game, if possible.
-- If this bug only occurred recently, include the last version without the bug, and the first version with the bug. That way we can fix it quicker by looking at the changes made.
+**Monkey Island SVGA, impulsado por ScummVM**
 
-Finally, please report each issue separately; do not file multiple issues on the same ticket. It is difficult to track the status of each individual bug when they aren't on their own tickets.
+## Qué se distribuye
 
-## Documentation
+Este proyecto **no distribuye el juego original**.
 
-### User documentation
+Necesitas tu propia copia legal de **The Secret of Monkey Island VGA para PC**.
 
-For everything you need to know about how to use ScummVM, see our [user documentation](https://docs.scummvm.org/).
+Lo que sí forma parte de este proyecto es:
 
-### The ScummVM Wiki
+- el código fuente del fork
+- los cambios sobre ScummVM
+- los shaders específicos de esta edición
+- los assets HD generados para esta versión
 
-[The wiki](https://wiki.scummvm.org/) is the place to go for information about every game supported by ScummVM. If you're a developer, there's also some very handy information in the Developer section.
+## Qué hace distinto a este fork
 
-### Changelog
+- Overlay de assets externos `Monkey_4X`
+- soporte para fondos HD en `PNG` y `JPEG`
+- soporte para objetos HD en `PNG`
+- inventario con sustitución directa por PNGs HD
+- render específico `MonkeyHdRenderer`
+- mejora runtime de sprites clásicos con `xBRZ`
+- conjunto de shaders reducido a los presets CRT realmente soportados por este fork
 
-Our extensive change log is available [here](NEWS.md).
+## Compilación
 
-## SAST Tools
+La compilación recomendada queda restringida al engine `SCUMM`:
 
-[PVS-Studio](https://pvs-studio.com/en/pvs-studio/?utm_source=github&utm_medium=organic&utm_campaign=open_source) - static analyzer for C, C++, C#, and Java code.
+```bash
+./configure --disable-all-engines --enable-engine=scumm
+make -j8 scummvm
+```
 
-## Credits
+Si existe el script auxiliar, hace exactamente eso:
 
-A massive thank you to the entire team for making the ScummVM project possible. See the credits [here](AUTHORS)!
+```bash
+./build-monkey.sh
+```
 
------
+La intención es que cualquiera pueda compilar este fork en su sistema, siempre que ScummVM sea compilable en esa plataforma y existan las dependencias habituales.
 
-> Good Luck and Happy Adventuring\!
-> The ScummVM team.
-> <https://www.scummvm.org/>
+## Estructura esperada
+
+El ejecutable debe convivir con los datos del juego y con los assets HD.
+
+Ejemplo típico:
+
+```text
+Monkey/
+  scummvm
+  scummvm-local.ini
+  monkey.000
+  monkey.001
+  monkey.sog
+  Monkey_4X/
+    backgrounds/
+    objects/
+  gui/
+    themes/
+```
+
+Notas:
+
+- `Monkey_4X/backgrounds` puede usar `.png`, `.jpg` o `.jpeg`
+- `Monkey_4X/objects` usa `.png`
+- `Monkey_extracted` puede existir como material de trabajo para generar assets, pero ya no es una dependencia de runtime
+- el juego original no se incluye
+- los assets HD sí forman parte del proyecto
+
+## Shaders
+
+Este fork sólo mantiene los shaders CRT preparados para esta versión:
+
+- `crt-interlaced-halation-monkeyhd.glslp`
+- `crt-interlaced-halation-strong-monkeyhd.glslp`
+- `crt-interlaced-halation-extreme-monkeyhd.glslp`
+
+No se pretende dar soporte a presets genéricos de ScummVM que no estén pensados para esta resolución y este pipeline.
+
+## Legal
+
+Este repositorio no incluye los datos originales de LucasArts.
+
+Debes aportar tu propia copia del juego original.
+
+Los assets HD incluidos en este proyecto pertenecen a esta adaptación y se distribuyen como parte del fork, pero no sustituyen la necesidad de poseer el juego original.
+
+ScummVM se distribuye bajo GPL. Consulta [COPYING](COPYING), [COPYRIGHT](COPYRIGHT) y [AUTHORS](AUTHORS) para los detalles de licencia y atribución.
+
+## Upstream
+
+Proyecto original:
+
+- [ScummVM en GitHub](https://github.com/scummvm/scummvm)
+- [Web oficial de ScummVM](https://www.scummvm.org/)
+
+Este fork nace desde ahí, con mucho respeto al proyecto original y con una intención muy concreta: darle a Monkey Island 1 VGA una versión HD bonita, coherente y fácil de compilar.

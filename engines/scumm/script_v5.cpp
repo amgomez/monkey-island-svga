@@ -21,6 +21,7 @@
 
 #include "scumm/actor.h"
 #include "scumm/charset.h"
+#include "scumm/monkey_hd.h"
 #include "scumm/object.h"
 #include "scumm/resource.h"
 #include "scumm/scumm_v3.h"
@@ -2657,6 +2658,8 @@ void ScummEngine_v5::o5_saveRestoreVerbs() {
 		while (a <= b) {
 			slot = getVerbSlot(a, 0);
 			if (slot && _verbs[slot].saveid == 0) {
+				if (_monkeyHdMode && _monkeyHdRenderer && _monkeyHdRenderer->isInventoryVerb(slot, _verbs[slot].imgindex))
+					restoreVerbBG(slot);
 				_verbs[slot].saveid = c;
 				drawVerb(slot, 0);
 				verbMouseOver(0);
@@ -3153,6 +3156,10 @@ void ScummEngine_v5::o5_verbOps() {
 			}
 			break;
 		case 2:		// SO_VERB_NAME
+			if (_monkeyHdMode && _monkeyHdRenderer && _monkeyHdRenderer->isInventoryVerb(slot, vs->imgindex))
+				restoreVerbBG(slot);
+			if (_monkeyHdMode && _monkeyHdRenderer)
+				_monkeyHdRenderer->forgetVerbObject(slot);
 			loadPtrToResource(rtVerb, slot, nullptr);
 			if (slot == 0)
 				_res->nukeResource(rtVerb, slot);
@@ -3189,12 +3196,16 @@ void ScummEngine_v5::o5_verbOps() {
 			vs->curmode = 1;
 			break;
 		case 7:		// SO_VERB_OFF
+			if (_monkeyHdMode && _monkeyHdRenderer && _monkeyHdRenderer->isInventoryVerb(slot, vs->imgindex))
+				restoreVerbBG(slot);
 			vs->curmode = 0;
 			break;
 		case 8:		// SO_VERB_DELETE
 			killVerb(slot);
 			break;
 		case 9:		// SO_VERB_NEW
+			if (_monkeyHdMode && _monkeyHdRenderer)
+				_monkeyHdRenderer->forgetVerbObject(slot);
 			slot = getVerbSlot(verb, 0);
 
 			if (_game.platform == Common::kPlatformFMTowns && _game.version == 3 && slot)
@@ -3235,6 +3246,10 @@ void ScummEngine_v5::o5_verbOps() {
 			vs->center = 1;
 			break;
 		case 20:	// SO_VERB_NAME_STR
+			if (_monkeyHdMode && _monkeyHdRenderer && _monkeyHdRenderer->isInventoryVerb(slot, vs->imgindex))
+				restoreVerbBG(slot);
+			if (_monkeyHdMode && _monkeyHdRenderer)
+				_monkeyHdRenderer->forgetVerbObject(slot);
 			ptr = getResourceAddress(rtString, getVarOrDirectWord(PARAM_1));
 
 			if (!ptr)

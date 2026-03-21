@@ -94,6 +94,7 @@ class IMuse;
 class IMuseDigital;
 class MacGui;
 class MusicEngine;
+class MonkeyHdRenderer;
 class Player_Towns;
 class ScummEngine;
 class ScummDebugger;
@@ -513,6 +514,7 @@ class ScummEngine : public Engine, public Common::Serializable {
 	friend class CharsetRenderer;
 	friend class CharsetRendererClassic;
 	friend class CharsetRendererTownsClassic;
+	friend class MonkeyHdRenderer;
 	friend class ResourceManager;
 	friend class MacGuiImpl;
 	friend class MacIndy3Gui;
@@ -747,7 +749,7 @@ protected:
 
 	void initBanners();
 	Common::KeyState showBannerAndPause(int bannerId, int32 waitTime, const char *msg, ...);
-	bool showBannerAndPauseForTextInput(int bannerId, const char *prompt, Common::String &input, uint maxLength = 255);
+	bool showBannerAndPauseForTextInput(int bannerId, const char *prompt, Common::String &input, uint maxLength);
 	Common::KeyState showOldStyleBannerAndPause(const char *msg, int color, int32 waitTime);
 	Common::KeyState printMessageAndPause(const char *msg, int color, int32 waitTime, bool drawOnSentenceLine);
 
@@ -1385,7 +1387,7 @@ protected:
 	// HACK Double the array size to handle 16-bit images.
 	// this should be dynamically allocated based on game depth instead.
 	byte _grabbedCursor[16384];
-	byte _macGrabbedCursor[16384 * 4]; // Double resolution cursor
+	byte _macGrabbedCursor[16384 * 16]; // Monkey HD can scale cursors up to 4x
 	byte _currentCursor = 0;
 
 	byte _newEffect = 0, _switchRoomEffect2 = 0, _switchRoomEffect = 0;
@@ -1483,10 +1485,14 @@ protected:
 	bool _enableEGADithering = false;
 	bool _supportsEGADithering = false;
 	bool _enableSegaShadowMode = false;
+	bool _monkeyHdMode = false;
+	MonkeyHdRenderer *_monkeyHdRenderer = nullptr;
 
 	virtual void drawDirtyScreenParts();
 	void updateDirtyScreen(VirtScreenNumber slot);
 	void drawStripToScreen(VirtScreen *vs, int x, int width, int top, int bottom);
+	void copyRectToScreenScaled(const byte *src, int pitch, int x, int y, int width, int height);
+	int getDisplayScaleFactor() const { return _monkeyHdMode ? 4 : 1; }
 
 	void mac_markScreenAsDirty(int x, int y, int w, int h);
 	void mac_drawStripToScreen(VirtScreen *vs, int top, int x, int y, int width, int height);

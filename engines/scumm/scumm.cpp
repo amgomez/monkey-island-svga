@@ -57,6 +57,7 @@
 #include "scumm/he/intern_he.h"
 #include "scumm/he/logic_he.h"
 #include "scumm/he/sound_he.h"
+#include "scumm/monkey_hd.h"
 #include "scumm/object.h"
 #include "scumm/macgui/macgui.h"
 #include "scumm/players/player_ad.h"
@@ -528,6 +529,7 @@ ScummEngine::~ScummEngine() {
 	}
 
 	delete _macGui;
+	delete _monkeyHdRenderer;
 
 #ifndef DISABLE_TOWNS_DUAL_LAYER_MODE
 	delete _townsScreen;
@@ -1020,6 +1022,21 @@ Common::Error ScummEngine::init() {
 		SearchMan.addSubDirectoryMatching(gameDataDir, "rooms 3");
 	}
 
+	if ((_game.id == GID_MONKEY_VGA || (_game.id == GID_MONKEY && _game.platform == Common::kPlatformDOS)) && _game.heversion == 0) {
+		Common::FSNode monkeyHdDir = gameDataDir.getChild("Monkey_4X");
+		if (monkeyHdDir.exists() && monkeyHdDir.isDirectory()) {
+			MonkeyHdRenderer *renderer = new MonkeyHdRenderer();
+			if (renderer->init(monkeyHdDir)) {
+				_monkeyHdRenderer = renderer;
+				_monkeyHdMode = true;
+				warning("Monkey HD 4X: using '%s' as custom asset root with original game-data fallbacks",
+					monkeyHdDir.getPath().toString(Common::Path::kNativeSeparator).c_str());
+			} else {
+				delete renderer;
+			}
+		}
+	}
+
 #ifdef ENABLE_SCUMM_7_8
 #ifdef MACOSX
 	if (_game.version == 8 && !memcmp(gameDataDir.getPath().toString('/').c_str(), "/Volumes/MONKEY3_", 17)) {
@@ -1427,7 +1444,16 @@ Common::Error ScummEngine::init() {
 	}
 
 	// Initialize backend
-	if (_renderMode == Common::kRenderHercA || _renderMode == Common::kRenderHercG) {
+	if (_monkeyHdMode) {
+#ifdef USE_RGB_COLOR
+		Common::List<Graphics::PixelFormat> tryModes;
+		tryModes.push_back(Graphics::PixelFormat::createFormatRGBA32());
+		tryModes.push_back(Graphics::PixelFormat::createFormatBGRA32());
+		initGraphics(_screenWidth * getDisplayScaleFactor(), _screenHeight * getDisplayScaleFactor(), tryModes);
+#else
+		initGraphics(_screenWidth * getDisplayScaleFactor(), _screenHeight * getDisplayScaleFactor());
+#endif
+	} else if (_renderMode == Common::kRenderHercA || _renderMode == Common::kRenderHercG) {
 		initGraphics(kHercWidth, kHercHeight);
 	} else if (_renderMode == Common::kRenderCGA_BW || (_renderMode == Common::kRenderEGA && _supportsEGADithering)) {
 		initGraphics(_screenWidth * 2, _screenHeight * 2);
@@ -1676,6 +1702,9 @@ void ScummEngine::setupScumm(const Common::Path &macResourceFile) {
 	// Create the charset renderer
 	setupCharsetRenderer(macFontFile);
 
+	if (_monkeyHdMode)
+		_textSurfaceMultiplier = 1;
+
 	// Create and clear the text surface
 	_textSurface.create(_screenWidth * _textSurfaceMultiplier, _screenHeight * _textSurfaceMultiplier, Graphics::PixelFormat::createFormatCLUT8());
 	clearTextSurface();
@@ -1769,7 +1798,8 @@ void ScummEngine::setupScumm(const Common::Path &macResourceFile) {
 #endif
 
 	free(_compositeBuf);
-	_compositeBuf = (byte *)malloc(_screenWidth * _textSurfaceMultiplier * _screenHeight * _textSurfaceMultiplier * _outputPixelFormat.bytesPerPixel);
+	const int compositeScale = _monkeyHdMode ? getDisplayScaleFactor() : MAX(1, _textSurfaceMultiplier);
+	_compositeBuf = (byte *)malloc(_screenWidth * compositeScale * _screenHeight * compositeScale * _outputPixelFormat.bytesPerPixel);
 
 	// MI2 NI DOS Demo, load demo.rec playback file if present
 	if ((_game.id == GID_MONKEY2) && (_game.features & GF_DEMO) && (_game.platform == Common::kPlatformDOS) && !ConfMan.getBool("disable_mi2_ni_demo"))
@@ -3234,9 +3264,9 @@ void ScummEngine::scummLoop_updateScummVars() {
 	// MI2 NI DOS Demo, start playback if demo.rec was loaded succesfully.
 	if ((_game.id == GID_MONKEY2) && (_game.features & GF_DEMO) && (_game.platform == Common::kPlatformDOS) && !ConfMan.getBool("disable_mi2_ni_demo")) {
 		_playback.mi2DemoArmPlaybackByRoom(this);
+		if (_playback._active)
+			_playback.playbackPump(this);
 	}
-	if (_playback._active)
-		_playback.playbackPump(this);
 	if (_game.version == 7) {
 		VAR(VAR_CAMERA_POS_X) = camera._cur.x;
 		VAR(VAR_CAMERA_POS_Y) = camera._cur.y;

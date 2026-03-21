@@ -1546,10 +1546,10 @@ void ScummEngine::drawString(int a, const byte *msg, Common::TextToSpeechManager
 			if (isV3Towns && i > 1 && buf[i - 1] == 0)
 				break;
 
-			_charset->printChar(c, true);
-			_charset->_blitAlso = false;
+				_charset->printChar(c, !(_monkeyHdMode && a == 2));
+				_charset->_blitAlso = false;
+			}
 		}
-	}
 
 	if (a == 0) {
 		_nextLeft = _charset->_left;

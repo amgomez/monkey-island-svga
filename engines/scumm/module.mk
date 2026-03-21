@@ -52,6 +52,7 @@ MODULE_OBJS := \
 	macgui/macgui_widgets.o \
 	metaengine.o \
 	midiparser_ro.o \
+	monkey_hd.o \
 	object.o \
 	palette.o \
 	playback.o \

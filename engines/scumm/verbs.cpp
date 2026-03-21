@@ -23,6 +23,7 @@
 #include "scumm/charset.h"
 #include "scumm/he/intern_he.h"
 #include "scumm/macgui/macgui.h"
+#include "scumm/monkey_hd.h"
 #include "scumm/object.h"
 #include "scumm/resource.h"
 #include "scumm/scumm_v0.h"
@@ -1199,6 +1200,8 @@ void ScummEngine::restoreVerbBG(int verb) {
 	VerbSlot *vs;
 
 	vs = &_verbs[verb];
+	if (_monkeyHdMode && _monkeyHdRenderer)
+		_monkeyHdRenderer->deactivateInventoryVerb(verb);
 	uint8 col =
 #ifndef DISABLE_TOWNS_DUAL_LAYER_MODE
 		((_game.platform == Common::kPlatformFMTowns) && (_game.id == GID_MONKEY2 || _game.id == GID_INDY4) && (vs->bkcolor == _townsOverrideShadowColor)) ? 0 :
@@ -1274,6 +1277,17 @@ void ScummEngine::drawVerbBitmap(int verb, int x, int y) {
 	}
 	assert(imptr);
 
+	Common::Rect bitmapRect(vst->curRect.left, vst->curRect.top, vst->curRect.left + imgw * 8, vst->curRect.top + imgh * 8);
+	if (_monkeyHdMode && _monkeyHdRenderer && _monkeyHdRenderer->activateInventoryVerb(verb, vst->imgindex, bitmapRect)) {
+		vst->curRect = bitmapRect;
+		vst->oldRect = bitmapRect;
+		markRectAsDirty(vs->number, bitmapRect);
+
+		_gdi->enableZBuffer();
+		vs->hasTwoBuffers = twobufs;
+		return;
+	}
+
 	if (_game.id == GID_LOOM && _game.platform == Common::kPlatformPCEngine) {
 		_gdi->_distaff = (vst->verbid != 54);
 	}
@@ -1313,6 +1327,8 @@ void ScummEngine::killVerb(int slot) {
 		return;
 
 	vs = &_verbs[slot];
+	if (_monkeyHdMode && _monkeyHdRenderer && _monkeyHdRenderer->isInventoryVerb(slot, vs->imgindex))
+		restoreVerbBG(slot);
 	vs->verbid = 0;
 	vs->curmode = 0;
 
@@ -1322,6 +1338,9 @@ void ScummEngine::killVerb(int slot) {
 		drawVerb(slot, 0);
 		verbMouseOver(0);
 	}
+	if (_monkeyHdMode && _monkeyHdRenderer)
+		_monkeyHdRenderer->forgetVerbObject(slot);
+	vs->imgindex = 0;
 	vs->saveid = 0;
 }
 
@@ -1335,6 +1354,9 @@ void ScummEngine::setVerbObject(uint room, uint object, uint verb) {
 	if (_game.heversion >= 70) { // Windows titles. Here we always ignore room
 		room = getObjectRoom(object);
 	}
+
+	if (_monkeyHdMode && _monkeyHdRenderer)
+		_monkeyHdRenderer->rememberVerbObject(verb, room, object);
 
 	if (whereIsObject(object) == WIO_FLOBJECT)
 		error("Can't grab verb image from flobject");

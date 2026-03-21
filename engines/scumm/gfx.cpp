@@ -22,6 +22,7 @@
 #include "common/system.h"
 #include "scumm/actor.h"
 #include "scumm/charset.h"
+#include "scumm/monkey_hd.h"
 #ifdef ENABLE_HE
 #include "scumm/he/intern_he.h"
 #endif
@@ -45,7 +46,89 @@ extern "C" void asmDrawStripToScreen(int height, int width, void const* text, vo
 extern "C" void asmCopy8Col(byte* dst, int dstPitch, const byte* src, int height, uint8 bitDepth);
 #endif /* USE_ARM_GFX_ASM */
 
+#include "common/array.h"
+#include "graphics/scaler/scalebit.h"
+#include "graphics/scaler/scale2x.h"
+
 namespace Scumm {
+
+static void scale2xBitmap8(byte *dst, int dstPitch, const byte *src, int srcPitch, int width, int height) {
+	for (int y = 0; y < height; ++y) {
+		const int prevY = (y > 0) ? (y - 1) : y;
+		const int nextY = (y + 1 < height) ? (y + 1) : y;
+		const byte *src0 = src + prevY * srcPitch;
+		const byte *src1 = src + y * srcPitch;
+		const byte *src2 = src + nextY * srcPitch;
+		byte *dst0 = dst + (y * 2) * dstPitch;
+		byte *dst1 = dst0 + dstPitch;
+		scale2x_8_def(dst0, dst1, src0, src1, src2, width);
+	}
+}
+
+static void scale4xBitmap8(byte *dst, int dstPitch, const byte *src, int srcPitch, int width, int height) {
+	Common::Array<byte> temp(width * 2 * height * 2, (byte)CHARSET_MASK_TRANSPARENCY);
+	scale2xBitmap8(temp.data(), width * 2, src, srcPitch, width, height);
+	scale2xBitmap8(dst, dstPitch, temp.data(), width * 2, width * 2, height * 2);
+}
+
+static void advMameScale4xBitmap8(byte *dst, int dstPitch, const byte *src, int srcPitch, int width, int height) {
+	if (scale_precondition(4, 1, width, height) != 0) {
+		scale4xBitmap8(dst, dstPitch, src, srcPitch, width, height);
+		return;
+	}
+
+	Common::Array<byte> padded(width * (height + 4));
+	const byte *firstRow = src;
+	const byte *lastRow = src + (height - 1) * srcPitch;
+	memcpy(padded.data(), firstRow, width);
+	memcpy(padded.data() + width, firstRow, width);
+	for (int y = 0; y < height; ++y)
+		memcpy(padded.data() + (y + 2) * width, src + y * srcPitch, width);
+	memcpy(padded.data() + (height + 2) * width, lastRow, width);
+	memcpy(padded.data() + (height + 3) * width, lastRow, width);
+
+	scale(4, dst, dstPitch, padded.data(), width, 1, width, height);
+}
+
+static void buildOutputPalette(const byte *paletteData, const Graphics::PixelFormat &dstFormat, uint32 outputPalette[256]) {
+	for (int i = 0; i < 256; ++i) {
+		const int color = i * 3;
+		outputPalette[i] = dstFormat.ARGBToColor(0xFF, paletteData[color + 0], paletteData[color + 1], paletteData[color + 2]);
+	}
+}
+
+static void scaleBitmap8ToOutput(byte *dst, int dstPitch, const byte *src, int srcPitch, int width, int height, int scale,
+		const byte *paletteData, const Graphics::PixelFormat &dstFormat, int transparentColor = -1) {
+	const int scaledWidth = width * scale;
+	const int scaledHeight = height * scale;
+	Common::Array<byte> scaledIndices(scaledWidth * scaledHeight, 0);
+
+	if (scale == 2) {
+		scale2xBitmap8(scaledIndices.data(), scaledWidth, src, srcPitch, width, height);
+	} else if (scale == 4) {
+		advMameScale4xBitmap8(scaledIndices.data(), scaledWidth, src, srcPitch, width, height);
+	} else {
+		for (int row = 0; row < height; ++row) {
+			for (int sy = 0; sy < scale; ++sy) {
+				byte *dstRow = scaledIndices.data() + (row * scale + sy) * scaledWidth;
+				for (int col = 0; col < width; ++col)
+					memset(dstRow + col * scale, src[row * srcPitch + col], scale);
+			}
+		}
+	}
+
+	uint32 outputPalette[256];
+	buildOutputPalette(paletteData, dstFormat, outputPalette);
+	for (int row = 0; row < scaledHeight; ++row) {
+		const byte *srcRow = scaledIndices.data() + row * scaledWidth;
+		uint32 *dstRow = (uint32 *)(dst + row * dstPitch);
+		for (int col = 0; col < scaledWidth; ++col) {
+			if (transparentColor >= 0 && srcRow[col] == transparentColor)
+				continue;
+			dstRow[col] = outputPalette[srcRow[col]];
+		}
+	}
+}
 
 static void blit(byte *dst, int dstPitch, const byte *src, int srcPitch, int w, int h, uint8 bitDepth);
 static void fill(byte *dst, int dstPitch, uint16 color, int w, int h, uint8 bitDepth);
@@ -627,6 +710,58 @@ void ScummEngine::updateDirtyScreen(VirtScreenNumber slot) {
  * arrays which map 'strips' (sections of the real screen) to dirty areas as
  * specified by top/bottom coordinate in the virtual screen.
  */
+void ScummEngine::copyRectToScreenScaled(const byte *src, int pitch, int x, int y, int width, int height) {
+	if (!_monkeyHdMode) {
+		_system->copyRectToScreen(src, pitch, x, y, width, height);
+		return;
+	}
+
+	const int scale = getDisplayScaleFactor();
+	if (_outputPixelFormat.bytesPerPixel == 1) {
+		const int outPitch = width * scale;
+		for (int yy = height - 1; yy >= 0; --yy) {
+			const byte *srcRow = src + yy * pitch;
+			byte *dstBaseRow = _compositeBuf + (yy * scale) * outPitch;
+			for (int xx = width - 1; xx >= 0; --xx) {
+				const byte color = srcRow[xx];
+				for (int sy = 0; sy < scale; ++sy) {
+					byte *dstRow = dstBaseRow + sy * outPitch;
+					memset(dstRow + xx * scale, color, scale);
+				}
+			}
+		}
+		_system->copyRectToScreen(_compositeBuf, outPitch, x * scale, y * scale, width * scale, height * scale);
+		return;
+	}
+
+	if (_outputPixelFormat.bytesPerPixel == 2) {
+		const int outPitch = width * scale * 2;
+		for (int yy = height - 1; yy >= 0; --yy) {
+			const uint16 *srcRow = (const uint16 *)(src + yy * pitch);
+			byte *dstBaseRow = _compositeBuf + (yy * scale) * outPitch;
+			for (int xx = width - 1; xx >= 0; --xx) {
+				const uint16 color = srcRow[xx];
+				for (int sy = 0; sy < scale; ++sy) {
+					uint16 *dstRow = (uint16 *)(dstBaseRow + sy * outPitch);
+					for (int sx = 0; sx < scale; ++sx)
+						dstRow[xx * scale + sx] = color;
+				}
+			}
+		}
+		_system->copyRectToScreen(_compositeBuf, outPitch, x * scale, y * scale, width * scale, height * scale);
+		return;
+	}
+
+	if (_outputPixelFormat.bytesPerPixel == 4) {
+		const int outPitch = width * scale * 4;
+		scaleBitmap8ToOutput(_compositeBuf, outPitch, src, pitch, width, height, scale, _currentPalette, _outputPixelFormat);
+		_system->copyRectToScreen(_compositeBuf, outPitch, x * scale, y * scale, width * scale, height * scale);
+		return;
+	}
+
+	_system->copyRectToScreen(src, pitch, x, y, width, height);
+}
+
 void ScummEngine::drawStripToScreen(VirtScreen *vs, int x, int width, int top, int bottom) {
 	// Short-circuit if nothing has to be drawn
 	if (bottom <= top || top >= vs->h)
@@ -664,6 +799,15 @@ void ScummEngine::drawStripToScreen(VirtScreen *vs, int x, int width, int top, i
 		return;
 	}
 
+	if (_monkeyHdMode && _monkeyHdRenderer) {
+		const int scale = getDisplayScaleFactor();
+		const int outPitch = width * scale * _outputPixelFormat.bytesPerPixel;
+		if (_monkeyHdRenderer->renderStageRect(*this, vs, x, top, width, height, _compositeBuf, outPitch)) {
+			_system->copyRectToScreen(_compositeBuf, outPitch, x * scale, y * scale, width * scale, height * scale);
+			return;
+		}
+	}
+
 	const void *src = vs->getPixels(x, top);
 	int m = _textSurfaceMultiplier;
 	int vsPitch;
@@ -676,7 +820,109 @@ void ScummEngine::drawStripToScreen(VirtScreen *vs, int x, int width, int top, i
 		return;
 	}
 
-	if (_game.version < 7) {
+		if (_game.version < 7) {
+			if (_monkeyHdMode && vs->number != kMainVirtScreen) {
+				const int scale = getDisplayScaleFactor();
+				const int textScale = MAX(1, _textSurfaceMultiplier);
+				const byte *src8 = (const byte *)src;
+				byte *dst8 = _compositeBuf;
+				const int scaledWidth = width * scale;
+				const int scaledHeight = height * scale;
+				const int outPitch = scaledWidth * _outputPixelFormat.bytesPerPixel;
+
+				if (_outputPixelFormat.bytesPerPixel == 4) {
+					memset(_compositeBuf, 0, outPitch * scaledHeight);
+					scaleBitmap8ToOutput(_compositeBuf, outPitch, src8, vs->pitch, width, height, scale, _currentPalette, _outputPixelFormat);
+
+					const int srcWidth = width * textScale;
+					const int srcHeight = height * textScale;
+					const byte *text8 = (const byte *)_textSurface.getBasePtr(x * textScale, y * textScale);
+					scaleBitmap8ToOutput(_compositeBuf, outPitch, text8, _textSurface.pitch, srcWidth, srcHeight,
+						(scale % textScale == 0) ? (scale / textScale) : 1, _currentPalette, _outputPixelFormat, CHARSET_MASK_TRANSPARENCY);
+
+					if (vs->number == kVerbVirtScreen) {
+						Graphics::Surface out;
+						out.init(scaledWidth, scaledHeight, outPitch, _compositeBuf, _outputPixelFormat);
+						_monkeyHdRenderer->overlayInventoryVerbs(*this, out, x, y, width, height);
+					}
+
+					_system->copyRectToScreen(_compositeBuf, outPitch, x * scale, y * scale, scaledWidth, scaledHeight);
+					return;
+				}
+
+				if (scale == 2) {
+					scale2xBitmap8(dst8, scaledWidth, src8, vs->pitch, width, height);
+				} else if (scale == 4) {
+				advMameScale4xBitmap8(dst8, scaledWidth, src8, vs->pitch, width, height);
+			} else {
+				for (int row = 0; row < height; ++row) {
+					for (int sy = 0; sy < scale; ++sy) {
+						byte *dstRow = dst8 + (row * scale + sy) * scaledWidth;
+						for (int col = 0; col < width; ++col) {
+							memset(dstRow + col * scale, src8[row * vs->pitch + col], scale);
+						}
+					}
+				}
+			}
+
+			if (scale == textScale) {
+				const byte *text8 = (const byte *)_textSurface.getBasePtr(x * textScale, y * textScale);
+				for (int row = 0; row < scaledHeight; ++row) {
+					byte *dstRow = dst8 + row * scaledWidth;
+					const byte *textRow = text8 + row * _textSurface.pitch;
+					for (int col = 0; col < scaledWidth; ++col) {
+						if (textRow[col] != CHARSET_MASK_TRANSPARENCY)
+							dstRow[col] = textRow[col];
+					}
+				}
+				} else if (scale == textScale * 2) {
+					const int srcWidth = width * textScale;
+					const int srcHeight = height * textScale;
+				Common::Array<byte> scaledText(scaledWidth * scaledHeight, (byte)CHARSET_MASK_TRANSPARENCY);
+				const byte *text8 = (const byte *)_textSurface.getBasePtr(x * textScale, y * textScale);
+				scale2xBitmap8(scaledText.data(), scaledWidth, text8, _textSurface.pitch, srcWidth, srcHeight);
+				for (int row = 0; row < scaledHeight; ++row) {
+					byte *dstRow = dst8 + row * scaledWidth;
+					const byte *textRow = scaledText.data() + row * scaledWidth;
+					for (int col = 0; col < scaledWidth; ++col) {
+						if (textRow[col] != CHARSET_MASK_TRANSPARENCY)
+							dstRow[col] = textRow[col];
+					}
+				}
+				} else if (scale == textScale * 4) {
+					const int srcWidth = width * textScale;
+					const int srcHeight = height * textScale;
+					Common::Array<byte> scaledText(scaledWidth * scaledHeight, (byte)CHARSET_MASK_TRANSPARENCY);
+					const byte *text8 = (const byte *)_textSurface.getBasePtr(x * textScale, y * textScale);
+					advMameScale4xBitmap8(scaledText.data(), scaledWidth, text8, _textSurface.pitch, srcWidth, srcHeight);
+					for (int row = 0; row < scaledHeight; ++row) {
+						byte *dstRow = dst8 + row * scaledWidth;
+						const byte *textRow = scaledText.data() + row * scaledWidth;
+						for (int col = 0; col < scaledWidth; ++col) {
+							if (textRow[col] != CHARSET_MASK_TRANSPARENCY)
+								dstRow[col] = textRow[col];
+						}
+					}
+				} else {
+					const int textBlitScale = (scale % textScale == 0) ? (scale / textScale) : 1;
+					const byte *text8 = (const byte *)_textSurface.getBasePtr(x * textScale, y * textScale);
+				for (int row = 0; row < height * textScale; ++row) {
+					const byte *textRow = text8 + row * _textSurface.pitch;
+					for (int col = 0; col < width * textScale; ++col) {
+						if (textRow[col] == CHARSET_MASK_TRANSPARENCY)
+							continue;
+						for (int sy = 0; sy < textBlitScale; ++sy) {
+							byte *dstRow = dst8 + (row * textBlitScale + sy) * width * scale;
+							memset(dstRow + col * textBlitScale, textRow[col], textBlitScale);
+						}
+					}
+				}
+			}
+
+			_system->copyRectToScreen(_compositeBuf, width * scale * _outputPixelFormat.bytesPerPixel, x * scale, y * scale, width * scale, height * scale);
+			return;
+		}
+
 		// For The Dig, FT and COMI, we just blit everything to the screen at once.
 		// For older games, things are more complicated. First off, we need to
 		// deal with the _textSurface, which needs to be composited over the
@@ -806,7 +1052,7 @@ void ScummEngine::drawStripToScreen(VirtScreen *vs, int x, int width, int top, i
 		mac_drawBufferToScreen((const byte *)src, pitch, x, y, width, height);
 	} else {
 		// Finally blit the whole thing to the screen
-		_system->copyRectToScreen(src, pitch, x, y, width, height);
+		copyRectToScreenScaled((const byte *)src, pitch, x, y, width, height);
 	}
 }
 
@@ -4757,7 +5003,10 @@ void ScummEngine::dissolveEffect(int width, int height) {
 				src = ditherVGAtoEGA(pitch, x, y, wd, ht);
 			}
 
-			_system->copyRectToScreen(src, pitch, x, y, wd, ht);
+			if (_monkeyHdMode && vs->number == kMainVirtScreen)
+				drawStripToScreen(vs, x, wd, y - vs->topline, y - vs->topline + ht);
+			else
+				copyRectToScreenScaled(src, pitch, x, y, wd, ht);
 		}
 
 		// Test for 1x1 pattern...
@@ -4816,7 +5065,7 @@ void ScummEngine::scrollEffect(int dir) {
 	}
 
 	byte *src;
-	int m = _textSurfaceMultiplier;
+	int m = _monkeyHdMode ? getDisplayScaleFactor() : _textSurfaceMultiplier;
 
 	if (m == 1 && _game.platform == Common::kPlatformMacintosh && _macScreen)
 		m = 2;
@@ -4839,7 +5088,10 @@ void ScummEngine::scrollEffect(int dir) {
 				if (_macScreen) {
 					mac_drawBufferToScreen(src, vsPitch, 0, (vs->h - step), vs->w, step, false);
 				} else {
-					_system->copyRectToScreen(src,
+					if (_monkeyHdMode && vs->number == kMainVirtScreen)
+						drawStripToScreen(vs, 0, vs->w, vs->h - step, vs->h);
+					else
+						copyRectToScreenScaled(src,
 											  vsPitch * m,
 											  0, (vs->h - step) * m,
 											  vs->w * m, step * m);
@@ -4866,7 +5118,10 @@ void ScummEngine::scrollEffect(int dir) {
 				if (_macScreen) {
 					mac_drawBufferToScreen(src, vsPitch, 0, 0, vs->w, step, false);
 				} else {
-					_system->copyRectToScreen(src,
+					if (_monkeyHdMode && vs->number == kMainVirtScreen)
+						drawStripToScreen(vs, 0, vs->w, 0, step);
+					else
+						copyRectToScreenScaled(src,
 											  vsPitch * m,
 											  0, 0,
 											  vs->w * m, step * m);
@@ -4892,7 +5147,10 @@ void ScummEngine::scrollEffect(int dir) {
 				if (_macScreen) {
 					mac_drawBufferToScreen(src, vsPitch, (vs->w - step), 0, step, vs->h, false);
 				} else {
-					_system->copyRectToScreen(src, vsPitch * m, (vs->w - step) * m, 0, step * m, vs->h * m);
+					if (_monkeyHdMode && vs->number == kMainVirtScreen)
+						drawStripToScreen(vs, vs->w - step, step, 0, vs->h);
+					else
+						copyRectToScreenScaled(src, vsPitch * m, (vs->w - step) * m, 0, step * m, vs->h * m);
 				}
 			}
 			waitForTimer(delay, true);
@@ -4914,7 +5172,10 @@ void ScummEngine::scrollEffect(int dir) {
 				if (_macScreen) {
 					mac_drawBufferToScreen(src, vsPitch, 0, 0, step, vs->h, false);
 				} else {
-					_system->copyRectToScreen(src, vsPitch * m, 0, 0, step * m, vs->h * m);
+					if (_monkeyHdMode && vs->number == kMainVirtScreen)
+						drawStripToScreen(vs, 0, step, 0, vs->h);
+					else
+						copyRectToScreenScaled(src, vsPitch * m, 0, 0, step * m, vs->h * m);
 				}
 			}
 
@@ -4960,7 +5221,7 @@ void ScummEngine::updateScreenShakeEffect() {
 
 	while (now >= _shakeNextTick) {
 		_shakeFrame = (_shakeFrame + 1) % NUM_SHAKE_POSITIONS;
-		_system->setShakePos(0, -shake_positions[_shakeFrame] * _textSurfaceMultiplier);
+		_system->setShakePos(0, -shake_positions[_shakeFrame] * (_monkeyHdMode ? getDisplayScaleFactor() : _textSurfaceMultiplier));
 		// In DOTT (and probably all other imuse games) this runs on the imuse timer which is a PIT 0 Timer at 291.304 Hz.
 		// Apparently it is the same timer setting for all sound drivers although it is set up not in the main executable
 		// but inside each respective ims driver during the driver load/init process. The screen shakes update every 8 ticks.

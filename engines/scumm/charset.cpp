@@ -1392,8 +1392,7 @@ void CharsetRendererClassic::drawBitsN(const Graphics::Surface &s, byte *dst, co
 	int y, x;
 	int color;
 	byte numbits, bits;
-
-	int pitch = s.pitch - width;
+	const int scale = (&s == &_vm->_textSurface) ? MAX(1, _vm->_textSurfaceMultiplier) : 1;
 
 	assert(bpp == 1 || bpp == 2 || bpp == 4 || bpp == 8);
 	bits = *src++;
@@ -1411,17 +1410,45 @@ void CharsetRendererClassic::drawBitsN(const Graphics::Surface &s, byte *dst, co
 			amigaMap = _vm->_roomPalette;
 	}
 
-	for (y = 0; y < height && y + drawTop < s.h; y++) {
+	if (scale == 1) {
+		int pitch = s.pitch - width;
+		for (y = 0; y < height && y + drawTop < s.h; y++) {
+			for (x = 0; x < width; x++) {
+				color = (bits >> (8 - bpp)) & 0xFF;
+
+				if (color && y + drawTop >= 0) {
+					if (amigaMap)
+						*dst = amigaMap[cmap[color]];
+					else
+						*dst = cmap[color];
+				}
+				dst++;
+				bits <<= bpp;
+				numbits -= bpp;
+				if (numbits == 0) {
+					bits = *src++;
+					numbits = 8;
+				}
+			}
+			dst += pitch;
+		}
+		return;
+	}
+
+	byte *dstBase = dst;
+	for (y = 0; y < height && (y + 1) * scale + drawTop * scale <= s.h; y++) {
+		byte *dstRowBase = dstBase + y * scale * s.pitch;
 		for (x = 0; x < width; x++) {
 			color = (bits >> (8 - bpp)) & 0xFF;
 
 			if (color && y + drawTop >= 0) {
-				if (amigaMap)
-					*dst = amigaMap[cmap[color]];
-				else
-					*dst = cmap[color];
+				const byte mappedColor = amigaMap ? amigaMap[cmap[color]] : cmap[color];
+				for (int sy = 0; sy < scale; ++sy) {
+					byte *scaledRow = dstRowBase + sy * s.pitch + x * scale;
+					memset(scaledRow, mappedColor, scale);
+				}
 			}
-			dst++;
+
 			bits <<= bpp;
 			numbits -= bpp;
 			if (numbits == 0) {
@@ -1429,7 +1456,6 @@ void CharsetRendererClassic::drawBitsN(const Graphics::Surface &s, byte *dst, co
 				numbits = 8;
 			}
 		}
-		dst += pitch;
 	}
 }
 

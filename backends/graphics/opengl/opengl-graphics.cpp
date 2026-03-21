@@ -72,6 +72,20 @@
 
 namespace OpenGL {
 
+#if !USE_FORCED_GLES
+static bool isMonkeyHdCrtShader(const Common::Path &shaderPath) {
+	const Common::String baseName = shaderPath.baseName();
+	return baseName == "crt-interlaced-halation-monkeyhd.glslp"
+		|| baseName == "crt-hd-halation-monkeyhd.glslp"
+		|| baseName == "crt-hd-halation-strong-monkeyhd.glslp"
+		|| baseName == "crt-hd-halation-extreme-monkeyhd.glslp";
+}
+
+static bool isMonkeyHdSourceSize(int width, int height) {
+	return (width == 640 && height == 400) || (width == 1280 && height == 800);
+}
+#endif
+
 OpenGLGraphicsManager::OpenGLGraphicsManager()
 	: _currentState(), _oldState(), _transactionMode(kTransactionNone), _screenChangeID(1 << (sizeof(int) * 8 - 2)),
 	  _pipeline(nullptr), _stretchMode(STRETCH_FIT),
@@ -1443,10 +1457,10 @@ void OpenGLGraphicsManager::displayActivityIconOnOSD(const Graphics::Surface *ic
 
 void OpenGLGraphicsManager::setPalette(const byte *colors, uint start, uint num) {
 	assert(_gameScreen);
-	assert(_gameScreen->hasPalette());
 
 	memcpy(_gamePalette + start * 3, colors, num * 3);
-	_gameScreen->setPalette(start, num, colors);
+	if (_gameScreen->hasPalette())
+		_gameScreen->setPalette(start, num, colors);
 
 	// We might need to update the cursor palette here.
 	updateCursorPalette();
@@ -1454,7 +1468,6 @@ void OpenGLGraphicsManager::setPalette(const byte *colors, uint start, uint num)
 
 void OpenGLGraphicsManager::grabPalette(byte *colors, uint start, uint num) const {
 	assert(_gameScreen);
-	assert(_gameScreen->hasPalette());
 
 	memcpy(colors, _gamePalette + start * 3, num * 3);
 }
@@ -1869,6 +1882,47 @@ void OpenGLGraphicsManager::recalculateDisplayAreas() {
 #endif
 
 	WindowedGraphicsManager::recalculateDisplayAreas();
+
+#if !USE_FORCED_GLES
+	// Keep the Monkey HD CRT presets on a stable even viewport.
+	// They are tuned to build the CRT effect on the native Monkey HD 4X image
+	// first, then resample that image to the final output rectangle.
+	if (_libretroPipeline && isMonkeyHdCrtShader(_currentState.shader) && _rotationMode == Common::kRotationNormal &&
+	    isMonkeyHdSourceSize(getWidth(), getHeight())) {
+		Insets insets = _ignoreGameSafeArea ? Insets{0, 0, 0, 0} : getSafeAreaInsets();
+		const int safeWidth = MAX(0, _windowWidth - insets.left - insets.right);
+		const int safeHeight = MAX(0, _windowHeight - insets.top - insets.bottom);
+
+		if (safeWidth > 0 && safeHeight > 0) {
+			// Monkey HD should be shown as 4:3, but ScummVM's own aspect-ratio
+			// transaction conflicts with this custom CRT path. Apply the final
+			// 4:3 output geometry directly here. Keep the viewport dimensions
+			// even so the interlaced/scanline shaders stay phase-stable.
+			int scaledWidth = safeWidth;
+			int scaledHeight = fracToInt(intToFrac(scaledWidth) / (intToFrac(4) / 3));
+			if (scaledHeight > safeHeight) {
+				scaledHeight = safeHeight;
+				scaledWidth = fracToInt(intToFrac(scaledHeight) * (intToFrac(4) / 3));
+			}
+
+			scaledWidth &= ~1;
+			scaledHeight &= ~1;
+
+			if (scaledWidth >= 2 && scaledHeight >= 2) {
+				const int left = insets.left + (safeWidth - scaledWidth) / 2 + _gameScreenShakeXOffset * scaledWidth / getWidth();
+				const int top = insets.top + (safeHeight - scaledHeight) / 2 + _gameScreenShakeYOffset * scaledHeight / getHeight();
+				_gameDrawRect = Common::Rect(left, top, left + scaledWidth, top + scaledHeight);
+
+				if (!_overlayInGUI) {
+					_activeArea.drawRect = _gameDrawRect;
+					_activeArea.width = getWidth();
+					_activeArea.height = getHeight();
+					notifyActiveAreaChanged();
+				}
+			}
+		}
+	}
+#endif
 
 #if !USE_FORCED_GLES
 	if (_libretroPipeline) {

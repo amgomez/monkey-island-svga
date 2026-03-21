@@ -166,6 +166,7 @@ MODULE_OBJS += \
 	scaler/scale2x.o \
 	scaler/scale3x.o \
 	scaler/scalebit.o \
+	scaler/xbrz.o \
 	scaler/tv.o
 
 ifdef USE_ARM_SCALER_ASM

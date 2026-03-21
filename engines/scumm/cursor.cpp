@@ -417,6 +417,47 @@ void ScummEngine_v6::setCursorTransparency(int a) {
 	updateCursor();
 }
 
+static void scaleCursorBuffer(const byte *src, byte *dst, int width, int height, int bytesPerPixel, int scale) {
+	for (int y = 0; y < height; ++y) {
+		const byte *srcRow = src + y * width * bytesPerPixel;
+		byte *dstRow = dst + (y * scale) * width * scale * bytesPerPixel;
+		for (int x = 0; x < width; ++x) {
+			const byte *pixel = srcRow + x * bytesPerPixel;
+			for (int sy = 0; sy < scale; ++sy) {
+				byte *dstScaledRow = dstRow + sy * width * scale * bytesPerPixel;
+				byte *dstPixel = dstScaledRow + x * scale * bytesPerPixel;
+				for (int sx = 0; sx < scale; ++sx)
+					memcpy(dstPixel + sx * bytesPerPixel, pixel, bytesPerPixel);
+			}
+		}
+	}
+}
+
+static void buildCursorOutputPalette(const byte *paletteData, const Graphics::PixelFormat &dstFormat, uint32 outputPalette[256]) {
+	for (int i = 0; i < 256; ++i) {
+		const int color = i * 3;
+		outputPalette[i] = dstFormat.ARGBToColor(0xFF, paletteData[color + 0], paletteData[color + 1], paletteData[color + 2]);
+	}
+}
+
+static void scaleCursorBufferToRGBA(const byte *src, byte *dst, int width, int height, int scale, const byte *paletteData,
+		const Graphics::PixelFormat &dstFormat, byte transparentColor) {
+	uint32 outputPalette[256];
+	buildCursorOutputPalette(paletteData, dstFormat, outputPalette);
+
+	for (int y = 0; y < height; ++y) {
+		const byte *srcRow = src + y * width;
+		for (int sy = 0; sy < scale; ++sy) {
+			uint32 *dstRow = (uint32 *)(dst + ((y * scale + sy) * width * scale * 4));
+			for (int x = 0; x < width; ++x) {
+				const uint32 color = (srcRow[x] == transparentColor) ? 0 : outputPalette[srcRow[x]];
+				for (int sx = 0; sx < scale; ++sx)
+					dstRow[x * scale + sx] = color;
+			}
+		}
+	}
+}
+
 void ScummEngine::updateCursor() {
 	int transColor = (_game.heversion >= 80) ? 5 : 255;
 	byte *cursor = _grabbedCursor;
@@ -427,6 +468,20 @@ void ScummEngine::updateCursor() {
 
 	if (_macScreen && _game.version == 6 && _game.heversion == 0)
 		mac_scaleCursor(cursor, hotspotX, hotspotY, width, height);
+	else if (_monkeyHdMode) {
+		const int scale = getDisplayScaleFactor();
+		if (_outputPixelFormat.bytesPerPixel == 4) {
+			scaleCursorBufferToRGBA(cursor, _macGrabbedCursor, width, height, scale, _currentPalette, _outputPixelFormat, transColor);
+			transColor = 0;
+		} else {
+			scaleCursorBuffer(cursor, _macGrabbedCursor, width, height, _outputPixelFormat.bytesPerPixel, scale);
+		}
+		cursor = _macGrabbedCursor;
+		width *= scale;
+		height *= scale;
+		hotspotX *= scale;
+		hotspotY *= scale;
+	}
 
 #ifdef USE_RGB_COLOR
 	Graphics::PixelFormat format = _system->getScreenFormat();
@@ -569,6 +624,21 @@ void ScummEngine_v7::updateCursor() {
 
 	if (_macScreen)
 		mac_scaleCursor(cursor, hotspotX, hotspotY, width, height);
+	else if (_monkeyHdMode) {
+		const int scale = getDisplayScaleFactor();
+		if (_outputPixelFormat.bytesPerPixel == 4) {
+			const byte *palette = isSmushActive() ? _splayer->getVideoPalette() : _currentPalette;
+			scaleCursorBufferToRGBA(cursor, _macGrabbedCursor, width, height, scale, palette, _outputPixelFormat, transColor);
+			transColor = 0;
+		} else {
+			scaleCursorBuffer(cursor, _macGrabbedCursor, width, height, _outputPixelFormat.bytesPerPixel, scale);
+		}
+		cursor = _macGrabbedCursor;
+		width *= scale;
+		height *= scale;
+		hotspotX *= scale;
+		hotspotY *= scale;
+	}
 
 #ifdef USE_RGB_COLOR
 	Graphics::PixelFormat format = _system->getScreenFormat();
@@ -1257,7 +1327,9 @@ void ScummEngine_v5::setBuiltinCursor(int idx) {
 	uint16 color;
 	const uint16 *src = _cursorImages[_currentCursor];
 
-	if (_outputPixelFormat.bytesPerPixel == 2) {
+	const int cursorBytesPerPixel = (_monkeyHdMode && _outputPixelFormat.bytesPerPixel == 4) ? 1 : _outputPixelFormat.bytesPerPixel;
+
+	if (cursorBytesPerPixel == 2) {
 		if (_game.id == GID_LOOM && _game.platform == Common::kPlatformPCEngine) {
 			byte r, g, b;
 			colorPCEToRGB(default_pce_cursor_colors[idx], &r, &g, &b);
@@ -1289,9 +1361,10 @@ void ScummEngine_v5::setBuiltinCursor(int idx) {
 		memset(_grabbedCursor, 0xFF, sizeof(_grabbedCursor));
 	}
 
-	int sclW = (_renderMode == Common::kRenderHercA || _renderMode == Common::kRenderHercG || _enableEGADithering) ? 2 : _textSurfaceMultiplier;
-	int sclH = (_renderMode == Common::kRenderHercA || _renderMode == Common::kRenderHercG) ? 1 : (_enableEGADithering ? 2 : _textSurfaceMultiplier);
-	int sclW2 = _outputPixelFormat.bytesPerPixel * sclW;
+	const int baseCursorScale = _monkeyHdMode ? 1 : _textSurfaceMultiplier;
+	int sclW = (_renderMode == Common::kRenderHercA || _renderMode == Common::kRenderHercG || _enableEGADithering) ? 2 : baseCursorScale;
+	int sclH = (_renderMode == Common::kRenderHercA || _renderMode == Common::kRenderHercG) ? 1 : (_enableEGADithering ? 2 : baseCursorScale);
+	int sclW2 = cursorBytesPerPixel * sclW;
 
 	_cursor.hotspotX = _cursorHotspots[2 * _currentCursor] * sclW;
 	_cursor.hotspotY = _cursorHotspots[2 * _currentCursor + 1] * sclH;
@@ -1303,10 +1376,10 @@ void ScummEngine_v5::setBuiltinCursor(int idx) {
 			if (src[i] & (1 << j)) {
 				byte *dst1 = _grabbedCursor + 16 * sclW2 * i * sclH + (15 - j) * sclW2;
 				byte *dst2 = (sclH == 2) ? dst1 + 16 * sclW2 : dst1;
-				if (_outputPixelFormat.bytesPerPixel == 2) {
-					for (int b = 0; b < sclW; b++) {
-						*((uint16 *)dst1) = *((uint16 *)dst2) = color;
-						dst1 += 2;
+					if (cursorBytesPerPixel == 2) {
+						for (int b = 0; b < sclW; b++) {
+							*((uint16 *)dst1) = *((uint16 *)dst2) = color;
+							dst1 += 2;
 						dst2 += 2;
 					}
 				} else {
