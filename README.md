@@ -103,6 +103,8 @@ El ejecutable está pensado para comportarse como una app dedicada a este juego:
 
 - si se lanza sin argumentos, intenta arrancar directamente `The Secret of Monkey Island (CD/DOS)` desde el directorio donde está el binario
 - si encuentra una ROM distinta, o no encuentra la ROM correcta, aborta con error
+- en ese arranque directo activa subtítulos por defecto
+- en ese arranque directo arranca a pantalla completa por defecto
 - el shader por defecto en ese arranque directo es `CRT Interlaced Halation Extreme`
 
 En otras palabras: no hay que elegir juego en el launcher. Si la carpeta contiene la ROM correcta y `Monkey_4X`, arranca.
@@ -126,6 +128,8 @@ Monkey/
   gui/
     themes/
 ```
+
+En una distribución dedicada, ese ejecutable puede renombrarse sin problema, por ejemplo a `MonkeySVGA`. Lo importante no es el nombre del binario, sino que conviva con la ROM correcta y con `Monkey_4X`.
 
 Notas:
 

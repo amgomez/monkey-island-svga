@@ -130,7 +130,11 @@ static Common::Path resolveMonkeySvgabasePath(const char *argv0) {
 }
 
 static Common::Path defaultMonkeySvgashaderPath(const Common::Path &basePath) {
-	return Common::FSNode(basePath).getChild("gui").getChild("themes").getChild("crt").getChild("crt-interlaced-halation-extreme-monkeyhd.glslp").getPath();
+	Common::FSNode shaderNode = Common::FSNode(basePath).getChild("gui").getChild("themes").getChild("crt").getChild("crt-interlaced-halation-extreme-monkeyhd.glslp");
+	if (shaderNode.exists() && !shaderNode.isDirectory())
+		return shaderNode.getPath();
+
+	return Common::Path();
 }
 
 static void activateDefaultMonkeySvgatarget(const Common::Path &basePath) {
@@ -150,12 +154,21 @@ static void activateDefaultMonkeySvgatarget(const Common::Path &basePath) {
 
 	if (!ConfMan.isKeyTemporary("themepath")) {
 		Common::FSNode themesDir = Common::FSNode(basePath).getChild("gui").getChild("themes");
-		ConfMan.setPath("themepath", themesDir.getPath(), Common::ConfigManager::kTransientDomain);
+		if (themesDir.exists() && themesDir.isDirectory())
+			ConfMan.setPath("themepath", themesDir.getPath(), Common::ConfigManager::kTransientDomain);
 	}
 
 	if (!ConfMan.isKeyTemporary("shader")) {
-		ConfMan.set("shader", defaultMonkeySvgashaderPath(basePath).toString(Common::Path::kNativeSeparator), Common::ConfigManager::kTransientDomain);
+		const Common::Path shaderPath = defaultMonkeySvgashaderPath(basePath);
+		if (!shaderPath.empty())
+			ConfMan.set("shader", shaderPath.toString(Common::Path::kNativeSeparator), Common::ConfigManager::kTransientDomain);
 	}
+
+	if (!ConfMan.isKeyTemporary("subtitles"))
+		ConfMan.setBool("subtitles", true, Common::ConfigManager::kTransientDomain);
+
+	if (!ConfMan.isKeyTemporary("speech_mute"))
+		ConfMan.setBool("speech_mute", false, Common::ConfigManager::kTransientDomain);
 
 	ConfMan.setBool("gui_return_to_launcher_at_exit", false, Common::ConfigManager::kTransientDomain);
 }
@@ -500,8 +513,13 @@ extern "C" int scummvm_main(int argc, const char * const argv[]) {
 	}
 
 	const bool autoLaunchMonkeySvga = command.empty();
+	if (autoLaunchMonkeySvga && !settings.contains("fullscreen"))
+		settings["fullscreen"] = "true";
+
 	if (autoLaunchMonkeySvga && !settings.contains("shader")) {
-		settings["shader"] = defaultMonkeySvgashaderPath(monkeySvgabasePath).toString(Common::Path::kNativeSeparator);
+		const Common::Path shaderPath = defaultMonkeySvgashaderPath(monkeySvgabasePath);
+		if (!shaderPath.empty())
+			settings["shader"] = shaderPath.toString(Common::Path::kNativeSeparator);
 	}
 
 	// Load the config file (possibly overridden via command line):
