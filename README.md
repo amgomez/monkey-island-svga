@@ -68,6 +68,14 @@ Lo que sí forma parte de este proyecto es:
 - los shaders específicos de esta edición
 - los assets HD generados para esta versión
 
+## Descargas
+
+Releases disponibles en GitHub:
+
+- [Release macOS](https://github.com/amgomez/monkey-island-svga/releases/tag/v.0.1.mac)
+- [Release Windows](https://github.com/amgomez/monkey-island-svga/releases/tag/v.0.1.win)
+- [Listado completo de releases](https://github.com/amgomez/monkey-island-svga/releases)
+
 ## Qué hace distinto a este fork
 
 - Overlay de assets externos `Monkey_4X`
